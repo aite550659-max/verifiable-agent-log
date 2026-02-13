@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "val-langchain"
+version = "0.1.0"
+description = "Verifiable Agent Log (VAL) callback handler for LangChain — immutable AI audit trails on Hedera HCS"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [{ name = "Aite", email = "aite550659@gmail.com" }]
+keywords = ["langchain", "hedera", "hcs", "val", "audit", "verifiable", "agent"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+    "langchain-core>=0.1.0",
+    "requests>=2.28.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio", "ruff"]
+
+[project.urls]
+Homepage = "https://github.com/aite550659-max/verifiable-agent-log"
+Repository = "https://github.com/aite550659-max/verifiable-agent-log"
