@@ -11,6 +11,12 @@ license: MIT
 
 # Verifiable Agent Log (VAL) v1.0
 
+![VAL Verified](badges/val-badge-verified.svg) ![VAL Active](badges/val-badge-active.svg)
+
+**[📛 Get Your Badge](BADGES.md)** | **[📖 Read the Spec](#1-abstract)** | **[🔧 Integrations](#integrations)** | **[💬 Community](https://discord.gg/val)** | **[🌐 Live Example](https://hashscan.io/mainnet/topic/0.0.10261370)**
+
+---
+
 ## 1. Abstract
 
 AI agents perform actions — transactions, API calls, file modifications — but produce no verifiable record of what they actually did. Local logs are mutable, deletable, and untrustworthy to third parties. The Verifiable Agent Log (VAL) defines a minimal, standardized attestation format for recording agent actions to immutable, append-only logs. VAL is chain-agnostic by design, with Hedera Consensus Service (HCS) as the reference implementation.
