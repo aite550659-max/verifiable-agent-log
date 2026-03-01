@@ -483,7 +483,7 @@ cd val-relay && npm install && node src/server.mjs
 ```
 
 Endpoints:
-- `POST /v1/provision` — Create & fund agent wallet (0.5 HBAR free tier)
+- `POST /v1/provision` — Create & fund agent wallet (0.4 HBAR free tier)
 - `POST /v1/fund` — Top up existing wallet
 - `GET /v1/balance` — Check balance + attestation estimate
 - `GET /v1/health` — Relay status

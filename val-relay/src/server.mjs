@@ -12,7 +12,7 @@
  *
  * Safeguards:
  *   - Rate limit: 1 provision per API key per 24h
- *   - Free tier: 0.5 HBAR per agent (~400 attestations)
+ *   - Free tier: 0.4 HBAR per agent (~250 attestations)
  *   - Max fund per request: 1 HBAR
  *   - API key required for all writes
  *   - Abuse detection: track provisions per IP
@@ -37,7 +37,7 @@ const OPERATOR_ID = process.env.HEDERA_OPERATOR_ID;
 const OPERATOR_KEY = process.env.HEDERA_OPERATOR_KEY;
 
 // Free tier limits
-const FREE_TIER_HBAR = 0.5;         // ~400 attestations + 1 topic creation
+const FREE_TIER_HBAR = 0.4;         // ~250 attestations + 1 topic creation
 const MAX_FUND_HBAR = 1.0;           // Max per funding request
 const PROVISION_COOLDOWN_MS = 86400000; // 24h between provisions per key
 const MAX_PROVISIONS_PER_IP = 5;      // Lifetime limit per IP
