@@ -431,3 +431,68 @@ Each of these builds *on top of* the attestation layer. VAL v1 is the foundation
 **Specification ends.**
 
 For questions, contributions, or implementations: [github.com/agenttrust/aap-spec](https://github.com/agenttrust/aap-spec) *(pending)*
+
+---
+
+## Integrations
+
+### JavaScript/TypeScript SDK (`val-sdk/`)
+
+```bash
+npm install @valprotocol/sdk
+```
+
+```typescript
+import { VAL, VALReader } from "@valprotocol/sdk";
+
+// Option 1: Bring your own Hedera wallet
+const val = new VAL({
+  operatorId: "0.0.12345",
+  operatorKey: "302e...",
+});
+
+// Option 2: Auto-provision via relay (zero Hedera knowledge needed)
+const val = new VAL({
+  relay: "https://relay.val.protocol",
+  apiKey: "val_free_xxx",
+  agentName: "my-trading-bot",
+});
+
+await val.init();
+await val.attest({ tool: "swap", desc: "Swapped 100 HBAR for USDC" });
+// → Immutable, hash-chained, publicly verifiable on HCS
+
+// Read & verify (no keys needed)
+const reader = new VALReader("0.0.12345");
+const log = await reader.fetch();
+const { valid } = reader.verifyChain(log);
+```
+
+**Policy Engine** — controls what gets attested:
+- `minimal` — value movement + identity changes only
+- `standard` (default) — + external side effects + data writes
+- `strict` — everything including reads
+- `custom` — your own filter function
+
+### VAL Relay (`val-relay/`)
+
+Provisions Hedera wallets and funds them for AI agents. The agent always signs its own transactions.
+
+```bash
+cd val-relay && npm install && node src/server.mjs
+```
+
+Endpoints:
+- `POST /v1/provision` — Create & fund agent wallet (0.5 HBAR free tier)
+- `POST /v1/fund` — Top up existing wallet
+- `GET /v1/balance` — Check balance + attestation estimate
+- `GET /v1/health` — Relay status
+
+### LangChain (`val-langchain/`)
+Python integration for LangChain agents. See `val-langchain/README.md`.
+
+### CrewAI (`val-crewai/`)
+Python integration for CrewAI agents. See `val-crewai/README.md`.
+
+### OpenClaw Skill (`openclaw-skill/`)
+Drop-in skill for OpenClaw agents. See `openclaw-skill/SKILL.md`.

@@ -1,0 +1,13 @@
+{
+  "name": "@valprotocol/relay",
+  "version": "0.1.0",
+  "description": "VAL Relay — funds Hedera wallets for AI agent attestations",
+  "main": "src/server.mjs",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "dev": "node --watch src/server.mjs"
+  },
+  "dependencies": {
+    "@hashgraph/sdk": "^2.58.0"
+  }
+}
