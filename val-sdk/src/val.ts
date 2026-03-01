@@ -306,12 +306,28 @@ export class VAL {
       );
     }
 
-    const tx = await new TopicMessageSubmitTransaction()
-      .setTopicId(this.topicId!)
-      .setMessage(message)
-      .execute(this.client);
+    let tx;
+    try {
+      tx = await new TopicMessageSubmitTransaction()
+        .setTopicId(this.topicId!)
+        .setMessage(message)
+        .execute(this.client);
+    } catch (e: unknown) {
+      if (isInsufficientBalance(e)) {
+        throw new InsufficientBalanceError(this.config.operatorId!, this.config.network ?? "mainnet");
+      }
+      throw e;
+    }
 
-    const receipt = await tx.getReceipt(this.client);
+    let receipt;
+    try {
+      receipt = await tx.getReceipt(this.client);
+    } catch (e: unknown) {
+      if (isInsufficientBalance(e)) {
+        throw new InsufficientBalanceError(this.config.operatorId!, this.config.network ?? "mainnet");
+      }
+      throw e;
+    }
     const seqNum = Number(receipt.topicSequenceNumber);
 
     // Update chain hash
@@ -328,4 +344,57 @@ export class VAL {
 
 function stripUndefined(obj: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
+}
+
+function isInsufficientBalance(e: unknown): boolean {
+  const msg = String(e);
+  return (
+    msg.includes("INSUFFICIENT_PAYER_BALANCE") ||
+    msg.includes("INSUFFICIENT_TX_FEE") ||
+    msg.includes("INSUFFICIENT_ACCOUNT_BALANCE")
+  );
+}
+
+/**
+ * Thrown when the agent's Hedera account doesn't have enough HBAR.
+ * Contains clear instructions for the agent to fund itself.
+ */
+export class InsufficientBalanceError extends Error {
+  readonly accountId: string;
+  readonly network: string;
+  readonly fundingInstructions: string;
+
+  constructor(accountId: string, network: string) {
+    const explorer =
+      network === "testnet"
+        ? `https://hashscan.io/testnet/account/${accountId}`
+        : `https://hashscan.io/mainnet/account/${accountId}`;
+
+    const instructions = [
+      `Your VAL agent account ${accountId} is out of HBAR.`,
+      ``,
+      `To continue attesting, fund your account:`,
+      `  1. Send HBAR to ${accountId} on Hedera ${network}`,
+      `  2. Minimum 0.1 HBAR (~100 attestations)`,
+      `  3. Recommended 1 HBAR (~900 attestations)`,
+      ``,
+      `How to fund:`,
+      `  • Transfer HBAR from any Hedera wallet (HashPack, Blade, Kabila)`,
+      `  • Bridge from another chain via Hashport (hashport.network)`,
+      `  • Purchase HBAR on an exchange and withdraw to ${accountId}`,
+      ``,
+      `Check balance: ${explorer}`,
+      ``,
+      `Estimated costs:`,
+      `  • 0.1 HBAR ≈ 100 attestations`,
+      `  • 0.5 HBAR ≈ 400 attestations`,
+      `  • 1.0 HBAR ≈ 900 attestations`,
+    ].join("\n");
+
+    super(instructions);
+    this.name = "InsufficientBalanceError";
+    this.accountId = accountId;
+    this.network = network;
+    this.fundingInstructions = instructions;
+  }
 }

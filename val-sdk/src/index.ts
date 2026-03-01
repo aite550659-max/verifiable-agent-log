@@ -1,4 +1,4 @@
-export { VAL } from "./val";
+export { VAL, InsufficientBalanceError } from "./val";
 export { VALReader } from "./reader";
 export { PolicyEngine } from "./policy";
 export { generateKeypair, createAccount, fundAccount, getBalance, estimateAttestations } from "./wallet";
