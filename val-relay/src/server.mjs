@@ -5,20 +5,25 @@
  * The agent always signs their own transactions — the relay just funds.
  *
  * Endpoints:
- *   POST /v1/provision  — Create a Hedera account, fund it, return credentials
- *   POST /v1/fund       — Top up an existing account
- *   GET  /v1/balance    — Check agent's HBAR balance + attestation estimate
- *   GET  /v1/health     — Relay health check
+ *   POST /v1/provision     — Create a Hedera account, fund it, return credentials
+ *   POST /v1/fund          — Top up an existing account
+ *   GET  /v1/balance       — Check agent's HBAR balance + attestation estimate
+ *   GET  /v1/health        — Relay health check
+ *   GET  /v1/swap/estimate — Get conversion rate for any crypto → HBAR
+ *   POST /v1/swap/create   — Create a swap (agent sends crypto, gets HBAR)
+ *   GET  /v1/swap/status   — Check swap completion
+ *   GET  /v1/swap/tokens   — List supported tokens
  *
  * Safeguards:
  *   - Rate limit: 1 provision per API key per 24h
- *   - Free tier: 0.4 HBAR per agent (~250 attestations)
+ *   - Free tier: 0.5 HBAR per agent (~400 attestations)
  *   - Max fund per request: 1 HBAR
  *   - API key required for all writes
  *   - Abuse detection: track provisions per IP
  */
 
 import { createServer } from "http";
+import { getEstimate, createSwap, getSwapStatus, listSupportedTokens } from "./swap.mjs";
 import {
   Client,
   AccountCreateTransaction,
@@ -37,7 +42,7 @@ const OPERATOR_ID = process.env.HEDERA_OPERATOR_ID;
 const OPERATOR_KEY = process.env.HEDERA_OPERATOR_KEY;
 
 // Free tier limits
-const FREE_TIER_HBAR = 0.4;         // ~250 attestations + 1 topic creation
+const FREE_TIER_HBAR = 0.5;         // ~400 attestations + 1 topic creation
 const MAX_FUND_HBAR = 1.0;           // Max per funding request
 const PROVISION_COOLDOWN_MS = 86400000; // 24h between provisions per key
 const MAX_PROVISIONS_PER_IP = 5;      // Lifetime limit per IP
@@ -235,6 +240,43 @@ const server = createServer(async (req, res) => {
       case "/v1/balance":
         result = await handleBalance(req, url);
         break;
+      case "/v1/swap/estimate": {
+        const from = url.searchParams.get("from");
+        const amount = url.searchParams.get("amount");
+        if (!from) {
+          result = { status: 400, body: { error: "from query param required (e.g. eth, sol, usdc)" } };
+        } else {
+          const estimate = await getEstimate(from, amount ? parseFloat(amount) : null);
+          result = { status: estimate.error ? 400 : 200, body: estimate };
+        }
+        break;
+      }
+      case "/v1/swap/create": {
+        if (req.method !== "POST") { result = { status: 405, body: { error: "POST required" } }; break; }
+        const { from: swapFrom, amount: swapAmount, accountId: swapAccount } = body;
+        if (!swapFrom || !swapAmount || !swapAccount) {
+          result = { status: 400, body: { error: "from, amount, and accountId required" } };
+        } else {
+          const swap = await createSwap(swapFrom, swapAmount, swapAccount);
+          result = { status: swap.error ? 400 : 200, body: swap };
+        }
+        break;
+      }
+      case "/v1/swap/status": {
+        const swapId = url.searchParams.get("id");
+        if (!swapId) {
+          result = { status: 400, body: { error: "id query param required" } };
+        } else {
+          const status = await getSwapStatus(swapId);
+          result = { status: status.error ? 400 : 200, body: status };
+        }
+        break;
+      }
+      case "/v1/swap/tokens": {
+        const tokens = await listSupportedTokens();
+        result = { status: 200, body: { tokens, note: "Send any of these to get HBAR for attestations" } };
+        break;
+      }
       case "/v1/health":
         result = {
           status: 200,
@@ -244,6 +286,7 @@ const server = createServer(async (req, res) => {
             operator: OPERATOR_ID,
             uptime: process.uptime(),
             provisioned: [...provisions.values()].reduce((s, r) => s + r.count, 0),
+            swapEnabled: !!process.env.CHANGENOW_API_KEY,
           },
         };
         break;
@@ -263,9 +306,14 @@ server.listen(PORT, () => {
   console.log(`   Network: ${NETWORK}`);
   console.log(`   Operator: ${OPERATOR_ID}`);
   console.log(`   Free tier: ${FREE_TIER_HBAR} HBAR per agent (~${Math.floor((FREE_TIER_HBAR - 0.1) / 0.001)} attestations)`);
+  console.log(`   Swap enabled: ${!!process.env.CHANGENOW_API_KEY}`);
   console.log(`\n   Endpoints:`);
-  console.log(`   POST /v1/provision  — Create & fund agent wallet`);
-  console.log(`   POST /v1/fund       — Top up agent wallet`);
-  console.log(`   GET  /v1/balance    — Check balance + estimate`);
-  console.log(`   GET  /v1/health     — Relay status\n`);
+  console.log(`   POST /v1/provision      — Create & fund agent wallet`);
+  console.log(`   POST /v1/fund           — Top up agent wallet`);
+  console.log(`   GET  /v1/balance        — Check balance + estimate`);
+  console.log(`   GET  /v1/swap/estimate  — Get rate: ?from=eth&amount=0.01`);
+  console.log(`   POST /v1/swap/create    — Create swap (from, amount, accountId)`);
+  console.log(`   GET  /v1/swap/status    — Check swap: ?id=<swapId>`);
+  console.log(`   GET  /v1/swap/tokens    — List supported tokens`);
+  console.log(`   GET  /v1/health         — Relay status\n`);
 });
