@@ -268,6 +268,40 @@ export class VAL {
     });
   }
 
+  /**
+   * Top up attestation credits by depositing any crypto.
+   *
+   * Returns a deposit address. Send crypto there and HBAR
+   * arrives in the agent's account automatically.
+   *
+   * The agent never needs to know about HBAR or Hedera.
+   * It just sends crypto and gets attestation credits.
+   */
+  async topup(
+    token: string,
+    amount: number
+  ): Promise<{
+    swapId: string;
+    depositAddress: string;
+    depositMemo?: string;
+    estimatedHbar: number;
+    estimatedAttestations: number;
+    message: string;
+  }> {
+    if (!this.config.relay) {
+      throw new Error("Relay URL required for top-up. Set config.relay.");
+    }
+    const accountId = this.config.operatorId;
+    const res = await fetch(`${this.config.relay}/v1/topup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accountId, token, amount }),
+    });
+    const data = await res.json() as any;
+    if (data.error) throw new Error(data.error);
+    return data;
+  }
+
   /** Post a heartbeat attestation */
   async heartbeat(
     data?: Partial<HeartbeatData>

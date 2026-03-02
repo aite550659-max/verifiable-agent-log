@@ -24,6 +24,7 @@
 
 import { createServer } from "http";
 import { getEstimate, createSwap, getSwapStatus, listSupportedTokens } from "./swap.mjs";
+import { createTopup, getTopupStatus, listTopups } from "./topup.mjs";
 import {
   Client,
   AccountCreateTransaction,
@@ -269,6 +270,27 @@ const server = createServer(async (req, res) => {
         } else {
           const status = await getSwapStatus(swapId);
           result = { status: status.error ? 400 : 200, body: status };
+        }
+        break;
+      }
+      case "/v1/topup": {
+        if (req.method !== "POST") { result = { status: 405, body: { error: "POST required" } }; break; }
+        const { accountId: topupAccount, token: topupToken, amount: topupAmount } = body;
+        if (!topupAccount || !topupToken || !topupAmount) {
+          result = { status: 400, body: { error: "accountId, token, and amount required" } };
+        } else {
+          const topup = await createTopup(topupAccount, topupToken, topupAmount);
+          result = { status: topup.error ? 400 : 200, body: topup };
+        }
+        break;
+      }
+      case "/v1/topup/status": {
+        const topupId = url.searchParams.get("id");
+        if (!topupId) {
+          result = { status: 400, body: { error: "id query param required" } };
+        } else {
+          const ts = await getTopupStatus(topupId);
+          result = { status: ts.error ? 400 : 200, body: ts };
         }
         break;
       }
