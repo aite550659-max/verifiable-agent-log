@@ -120,7 +120,7 @@ Submitted whenever the agent performs a significant action.
 | `output_hash`  | string | no       | Hash of the output/result. |
 | `context_hash` | string | no       | Hash of the conversation or task context at time of action. |
 | `status`       | string | yes      | `success`, `failure`, or `error`. |
-| `desc`         | string | no       | Brief human-readable summary. Describe *what happened*, not the details — amounts, addresses, and counterparties belong in hashed inputs, not descriptions. E.g. "HBAR to SOL conversion executed" not "Sent 5 HBAR to 0.0.180409 via ChangeNOW for SOL swap". Keep under 80 chars. |
+| `desc`         | string | no       | Brief human-readable summary. Describe *what happened*, not the details — amounts, addresses, and counterparties belong in hashed inputs, not descriptions. E.g. "Crypto conversion executed" not "Sent 5 HBAR to 0.0.180409 via ChangeNOW for SOL swap". Keep under 80 chars. |
 
 **What to hash:** The hash is over the JSON-serialized content. This lets a party who has the original content verify the attestation without the content being public.
 
