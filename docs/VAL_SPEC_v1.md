@@ -120,7 +120,7 @@ Submitted whenever the agent performs a significant action.
 | `output_hash`  | string | no       | Hash of the output/result. |
 | `context_hash` | string | no       | Hash of the conversation or task context at time of action. |
 | `status`       | string | yes      | `success`, `failure`, or `error`. |
-| `desc`         | string | no       | Brief human-readable description. Keep under 100 chars. |
+| `desc`         | string | no       | Brief human-readable summary. Describe *what happened*, not the details — amounts, addresses, and counterparties belong in hashed inputs, not descriptions. E.g. "HBAR to SOL conversion executed" not "Sent 5 HBAR to 0.0.180409 via ChangeNOW for SOL swap". Keep under 80 chars. |
 
 **What to hash:** The hash is over the JSON-serialized content. This lets a party who has the original content verify the attestation without the content being public.
 
@@ -462,6 +462,8 @@ An agent that skips attestation for private actions breaks the trust model. An a
 ```
 
 The log shows: this agent sent an email at 21:30, it succeeded, and here are the hashes. It does not show: who received it, what it said, or why it was sent. If the owner later needs to prove what was sent, they disclose the original content and the hash verifies it.
+
+Even for public actions, descriptions should summarize the *what*, not the *how*. Amounts, addresses, counterparties, and venue details belong in the hashed input — not the description. The `desc` builds trust by showing intent and outcome; the hashes provide the audit trail for verification.
 
 ## 11. What's NOT in v1
 
