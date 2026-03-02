@@ -18,6 +18,7 @@ export type {
 } from "./types";
 export type {
   PolicyLevel,
+  PrivacyLevel,
   AttestPolicy,
   PolicyFilter,
   ActionCategory,

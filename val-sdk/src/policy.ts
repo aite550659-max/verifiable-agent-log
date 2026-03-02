@@ -1,8 +1,14 @@
 /**
- * Attestation Policy — defines what "significant" means.
+ * Attestation Policy — defines what "significant" means and what's visible.
  *
- * The core principle: if the action can't be undone, it should be attested.
- * Reading is reversible. Sending money is not. Sending an email is not.
+ * Two dimensions:
+ *   1. SIGNIFICANCE: if the action can't be undone, it should be attested.
+ *   2. PRIVACY: attest the shape, not the content. Hashes prove everything;
+ *      descriptions are redacted by default for private categories.
+ *
+ * Privacy principle: every agent has private context. Redacted attestation
+ * is the standard, not the exception. Hashes allow selective disclosure —
+ * privacy by default, transparency on demand.
  */
 
 /** Categories of agent actions */
@@ -15,6 +21,9 @@ export type ActionCategory =
   | "data_read"         // Reads, queries, searches (reversible)
   | "internal"          // Thinking, planning, internal state (reversible)
   | "unknown";          // Unclassified
+
+/** Privacy level for attestation content */
+export type PrivacyLevel = "public" | "redacted" | "hashed_only";
 
 /** Built-in policy levels */
 export type PolicyLevel = "minimal" | "standard" | "strict" | "custom";
@@ -32,6 +41,28 @@ export interface AttestPolicy {
   /** Tools to never attest regardless of category */
   neverAttest?: string[];
 }
+
+/**
+ * Default privacy level per category.
+ *
+ * Public: full desc, amounts, addresses — nothing sensitive.
+ * Redacted: tool name, category, hashes, status. No content, recipients, subjects.
+ * Hashed only: only hashes + status. Not even the tool name. (Reserved for future use.)
+ *
+ * An agent or its owner can selectively disclose the original content for any
+ * redacted/hashed attestation. The verifier checks content against the hash.
+ * Privacy by default, transparency on demand.
+ */
+const PRIVACY_DEFAULTS: Record<ActionCategory, PrivacyLevel> = {
+  value_transfer: "public",       // Financial actions — transparency is the point
+  value_approve: "public",        // Approvals affect third parties
+  identity_change: "public",      // Identity changes should be visible
+  external_comms: "redacted",     // Who you talk to and what you say is private
+  data_write: "redacted",         // File contents, DB mutations — private by default
+  data_read: "redacted",          // What you read reveals intent — private
+  internal: "redacted",           // Thinking and planning — private
+  unknown: "redacted",            // When in doubt, redact
+};
 
 /** Categories that each policy level attests */
 const POLICY_CATEGORIES: Record<Exclude<PolicyLevel, "custom">, Set<ActionCategory>> = {
@@ -125,6 +156,48 @@ export class PolicyEngine {
       if (key.includes(known)) return cat;
     }
     return "unknown";
+  }
+
+  /** Determine the privacy level for an action */
+  privacyLevel(tool: string, categoryOverride?: ActionCategory): PrivacyLevel {
+    const category = categoryOverride ?? this.classify(tool);
+    return PRIVACY_DEFAULTS[category] ?? "redacted";
+  }
+
+  /**
+   * Redact attestation data based on privacy level.
+   * Public: pass through as-is.
+   * Redacted: strip desc, keep tool/category/hashes/status, add privacy marker.
+   * Hashed_only: strip everything except hashes and status.
+   */
+  redact(data: Record<string, unknown>, tool: string, categoryOverride?: ActionCategory): Record<string, unknown> {
+    const privacy = this.privacyLevel(tool, categoryOverride);
+    const category = categoryOverride ?? this.classify(tool);
+
+    if (privacy === "public") {
+      return { ...data, privacy: "public" };
+    }
+
+    if (privacy === "hashed_only") {
+      // Most restrictive: only hashes and status survive
+      const out: Record<string, unknown> = { privacy: "hashed_only", status: data.status };
+      if (data.input_hash) out.input_hash = data.input_hash;
+      if (data.output_hash) out.output_hash = data.output_hash;
+      if (data.context_hash) out.context_hash = data.context_hash;
+      return out;
+    }
+
+    // Redacted: tool, category, hashes, status — no desc, no content
+    const out: Record<string, unknown> = {
+      tool: data.tool,
+      category,
+      status: data.status,
+      privacy: "redacted",
+    };
+    if (data.input_hash) out.input_hash = data.input_hash;
+    if (data.output_hash) out.output_hash = data.output_hash;
+    if (data.context_hash) out.context_hash = data.context_hash;
+    return out;
   }
 
   /** Should this action be attested? */

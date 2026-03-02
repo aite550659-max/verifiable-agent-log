@@ -232,7 +232,7 @@ export class VAL {
       return null;
     }
 
-    const data: ActionData = {
+    const rawData: Record<string, unknown> = {
       tool: opts.tool,
       status: opts.status ?? "success",
       desc: opts.desc,
@@ -240,12 +240,19 @@ export class VAL {
       output_hash: opts.output !== undefined ? sha256(opts.output) : undefined,
     };
 
+    // Apply privacy redaction based on policy
+    const data = this.policy.redact(
+      stripUndefined(rawData),
+      opts.tool,
+      opts.category
+    );
+
     return this.submit({
       val: "1.0",
       type: "action",
       ts: new Date().toISOString(),
       agent: this.topicId!.toString(),
-      data: stripUndefined(data as unknown as Record<string, unknown>),
+      data,
     });
   }
 
