@@ -1,4 +1,6 @@
-export { VAL, InsufficientBalanceError } from "./val";
+export { VAL, InsufficientBalanceError, SwapInProgressError, ApprovalNeededError } from "./val";
+export { ensureFunded } from "./autofund";
+export type { WalletBalance, FundingResult } from "./autofund";
 export { VALReader } from "./reader";
 export { PolicyEngine } from "./policy";
 export { generateKeypair, createAccount, fundAccount, getBalance, estimateAttestations } from "./wallet";

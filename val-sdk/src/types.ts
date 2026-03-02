@@ -20,6 +20,13 @@ export interface VALConfig {
   apiKey?: string;
   /** Path to persist wallet credentials (default: ~/.val/wallet.json) */
   walletPath?: string;
+  /**
+   * Other crypto wallets the agent has access to.
+   * Used for auto-funding: when HBAR runs low, the SDK will
+   * cascade through these wallets to find one that can be
+   * swapped to HBAR via ChangeNOW.
+   */
+  wallets?: import("./autofund").WalletBalance[];
 }
 
 /** Base attestation envelope per VAL v1 spec */

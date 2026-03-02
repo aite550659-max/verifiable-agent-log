@@ -9,7 +9,9 @@ import {
 import { sha256 } from "./hash";
 import { PolicyEngine } from "./policy";
 import { loadWallet, saveWallet, provisionViaRelay } from "./provision";
+import { ensureFunded } from "./autofund";
 import type { ActionCategory } from "./policy";
+import type { WalletBalance } from "./autofund";
 import type {
   VALConfig,
   Attestation,
@@ -282,6 +284,57 @@ export class VAL {
 
   // ─── Internal ──────────────────────────────────────────────
 
+  /**
+   * Auto-funding cascade when HBAR is insufficient.
+   * 1. Check other wallets for auto-swappable balances
+   * 2. If found, swap to HBAR via relay
+   * 3. If needs approval, throw with candidate info
+   * 4. If no funds, throw InsufficientBalanceError
+   */
+  private async handleInsufficientBalance(): Promise<void> {
+    const relay = this.config.relay;
+    const wallets = this.config.wallets ?? [];
+    const accountId = this.config.operatorId!;
+    const network = this.config.network ?? "mainnet";
+
+    // If we have a relay and wallets configured, try auto-funding
+    if (relay && wallets.length > 0) {
+      const result = await ensureFunded(relay, accountId, wallets);
+
+      switch (result.action) {
+        case "sufficient":
+          // Balance was actually fine — shouldn't happen here but handle gracefully
+          return;
+
+        case "auto_swapped":
+          // Swap initiated — wait for it (poll briefly, then let caller retry)
+          // Note: ChangeNOW swaps take 10-60 min, so we can't block here.
+          // Throw a descriptive error so the agent knows a swap is in progress.
+          throw new SwapInProgressError(
+            result.swap!.swapId,
+            result.swap!.from,
+            result.swap!.amount,
+            result.swap!.estimatedHbar,
+            result.swap!.depositAddress,
+            accountId
+          );
+
+        case "approval_needed":
+          throw new ApprovalNeededError(
+            result.candidateWallet!,
+            accountId,
+            network
+          );
+
+        case "no_funds":
+          throw new InsufficientBalanceError(accountId, network);
+      }
+    }
+
+    // No relay or no wallets configured — direct error
+    throw new InsufficientBalanceError(accountId, network);
+  }
+
   private ensureReady() {
     if (!this._ready || !this.topicId) {
       throw new Error("VAL not initialized — call init() first");
@@ -314,9 +367,15 @@ export class VAL {
         .execute(this.client);
     } catch (e: unknown) {
       if (isInsufficientBalance(e)) {
-        throw new InsufficientBalanceError(this.config.operatorId!, this.config.network ?? "mainnet");
+        await this.handleInsufficientBalance();
+        // Retry once after funding
+        tx = await new TopicMessageSubmitTransaction()
+          .setTopicId(this.topicId!)
+          .setMessage(message)
+          .execute(this.client);
+      } else {
+        throw e;
       }
-      throw e;
     }
 
     let receipt;
@@ -397,5 +456,75 @@ export class InsufficientBalanceError extends Error {
     this.accountId = accountId;
     this.network = network;
     this.fundingInstructions = instructions;
+  }
+}
+
+/**
+ * Thrown when a swap has been initiated but HBAR hasn't arrived yet.
+ * The agent should wait and retry.
+ */
+export class SwapInProgressError extends Error {
+  readonly swapId: string;
+  readonly fromToken: string;
+  readonly fromAmount: number;
+  readonly estimatedHbar: number;
+  readonly depositAddress: string;
+  readonly hederaAccount: string;
+
+  constructor(
+    swapId: string,
+    fromToken: string,
+    fromAmount: number,
+    estimatedHbar: number,
+    depositAddress: string,
+    hederaAccount: string
+  ) {
+    const msg = [
+      `Auto-funding in progress: swapping ${fromAmount} ${fromToken.toUpperCase()} → ~${estimatedHbar.toFixed(1)} HBAR`,
+      ``,
+      `Swap ID: ${swapId}`,
+      `Send ${fromAmount} ${fromToken.toUpperCase()} to: ${depositAddress}`,
+      `HBAR destination: ${hederaAccount}`,
+      `Estimated arrival: 10-60 minutes`,
+      ``,
+      `Check status: GET /v1/swap/status?id=${swapId}`,
+      `Retry your attestation after the swap completes.`,
+    ].join("\n");
+
+    super(msg);
+    this.name = "SwapInProgressError";
+    this.swapId = swapId;
+    this.fromToken = fromToken;
+    this.fromAmount = fromAmount;
+    this.estimatedHbar = estimatedHbar;
+    this.depositAddress = depositAddress;
+    this.hederaAccount = hederaAccount;
+  }
+}
+
+/**
+ * Thrown when a wallet with funds exists but needs human approval to swap.
+ */
+export class ApprovalNeededError extends Error {
+  readonly candidateWallet: WalletBalance;
+  readonly hederaAccount: string;
+  readonly network: string;
+
+  constructor(wallet: WalletBalance, hederaAccount: string, network: string) {
+    const msg = [
+      `HBAR balance low. Found ${wallet.balance} ${wallet.token} on ${wallet.chain} that can be swapped.`,
+      ``,
+      `Approve swap of ${wallet.token} → HBAR?`,
+      `  Source: ${wallet.address} (${wallet.chain})`,
+      `  Destination: ${hederaAccount} (Hedera ${network})`,
+      ``,
+      `To approve, call: val.approveSwap("${wallet.token}", "${wallet.chain}")`,
+    ].join("\n");
+
+    super(msg);
+    this.name = "ApprovalNeededError";
+    this.candidateWallet = wallet;
+    this.hederaAccount = hederaAccount;
+    this.network = network;
   }
 }
