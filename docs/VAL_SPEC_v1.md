@@ -120,7 +120,7 @@ Submitted whenever the agent performs a significant action.
 | `output_hash`  | string | no       | Hash of the output/result. |
 | `context_hash` | string | no       | Hash of the conversation or task context at time of action. |
 | `status`       | string | yes      | `success`, `failure`, or `error`. |
-| `desc`         | string | no       | Brief human-readable summary. Describe *what happened*, not the details — amounts, addresses, and counterparties belong in hashed inputs, not descriptions. E.g. "Crypto conversion executed" not "Sent 5 HBAR to 0.0.180409 via ChangeNOW for SOL swap". Keep under 80 chars. |
+| `desc`         | string | no       | The action, in a word or short phrase. E.g. "transaction", "email", "deployment", "search". This is a label, not a sentence. All detail lives in hashes. |
 
 **What to hash:** The hash is over the JSON-serialized content. This lets a party who has the original content verify the attestation without the content being public.
 
@@ -451,8 +451,7 @@ An agent that skips attestation for private actions breaks the trust model. An a
   "val": "1.0", "type": "action", "ts": "2026-03-01T21:30:00Z",
   "agent": "0.0.12345",
   "data": {
-    "tool": "send_email",
-    "category": "external_comms",
+    "tool": "email",
     "input_hash": "sha256:b7d1e4a8...",
     "output_hash": "sha256:9c3f0a12...",
     "status": "success",
@@ -461,9 +460,9 @@ An agent that skips attestation for private actions breaks the trust model. An a
 }
 ```
 
-The log shows: this agent sent an email at 21:30, it succeeded, and here are the hashes. It does not show: who received it, what it said, or why it was sent. If the owner later needs to prove what was sent, they disclose the original content and the hash verifies it.
+The log shows: this agent performed an email action at 21:30 and it succeeded. That's it. The hashes let anyone with the original content verify it later. Privacy by default, transparency on demand.
 
-Even for public actions, descriptions should summarize the *what*, not the *how*. Amounts, addresses, counterparties, and venue details belong in the hashed input — not the description. The `desc` builds trust by showing intent and outcome; the hashes provide the audit trail for verification.
+Descriptions are labels, not narratives. One word is enough: "transaction", "email", "query". The purpose of the log is to prove actions happened, not to describe them. Hashes carry the detail; the `desc` is a human-scannable category label.
 
 ## 11. What's NOT in v1
 

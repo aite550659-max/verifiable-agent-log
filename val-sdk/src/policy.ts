@@ -124,6 +124,45 @@ const TOOL_CATEGORIES: Record<string, ActionCategory> = {
   query: "data_read",
 };
 
+/**
+ * Distill a tool name to a single action word.
+ * "send_email" → "email", "hbar_transfer" → "transaction",
+ * "web_search" → "search", "deploy_contract" → "deployment"
+ */
+const TOOL_LABELS: Record<string, string> = {
+  // Value movement → "transaction"
+  transfer: "transaction", send: "transaction", swap: "transaction",
+  bridge: "transaction", stake: "transaction", unstake: "transaction",
+  deposit: "transaction", withdraw: "transaction", lock: "transaction",
+  claim: "transaction", mint: "transaction", burn: "transaction",
+  // Approvals → "authorization"
+  approve: "authorization", revoke: "authorization", delegate: "authorization",
+  allowance: "authorization", permit: "authorization",
+  // Comms → the medium
+  send_email: "email", send_message: "message", post_tweet: "post",
+  post: "post", reply: "reply", notify: "notification", webhook: "webhook",
+  // Identity → "configuration"
+  update_prompt: "configuration", update_soul: "configuration",
+  rotate_key: "configuration", grant_access: "configuration",
+  revoke_access: "configuration", update_config: "configuration",
+  // Data → the verb
+  deploy_contract: "deployment", create_topic: "creation",
+  write_file: "write", create_account: "creation",
+  get_balance: "query", get_price: "query", web_search: "search",
+  read_file: "read", query: "query",
+};
+
+function simplifyTool(tool: string): string {
+  const key = tool.toLowerCase();
+  if (TOOL_LABELS[key]) return TOOL_LABELS[key];
+  // Partial match
+  for (const [known, label] of Object.entries(TOOL_LABELS)) {
+    if (key.includes(known)) return label;
+  }
+  // Fallback: use the tool name itself, stripped of underscores
+  return key.replace(/_/g, " ").split(" ").pop() || key;
+}
+
 export class PolicyEngine {
   private policy: AttestPolicy;
   private customCategories: Map<string, ActionCategory> = new Map();
@@ -175,7 +214,12 @@ export class PolicyEngine {
     const category = categoryOverride ?? this.classify(tool);
 
     if (privacy === "public") {
-      return { ...data, privacy: "public" };
+      // Public: keep tool + hashes + status, simplify desc to action label
+      const out: Record<string, unknown> = { ...data, privacy: "public" };
+      if (out.desc && typeof out.desc === "string" && out.desc.length > 30) {
+        out.desc = simplifyTool(String(data.tool ?? ""));
+      }
+      return out;
     }
 
     if (privacy === "hashed_only") {
@@ -187,10 +231,9 @@ export class PolicyEngine {
       return out;
     }
 
-    // Redacted: tool, category, hashes, status — no desc, no content
+    // Redacted: tool label, hashes, status — no desc, no category, no content
     const out: Record<string, unknown> = {
-      tool: data.tool,
-      category,
+      tool: simplifyTool(String(data.tool ?? "")),
       status: data.status,
       privacy: "redacted",
     };
