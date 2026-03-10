@@ -131,6 +131,8 @@ describe("DID Document Generation", () => {
 
     assert.equal(doc.id, "did:hedera:mainnet:z7ASgb_0.0.12345");
     assert.equal(doc.verificationMethod.length, 1);
+    assert.equal(doc.verificationMethod[0].controller, "did:hedera:mainnet:z7ASgb_0.0.12345");
+    assert.ok(doc.verificationMethod[0].id.startsWith("did:hedera:mainnet:z7ASgb_0.0.12345#"));
     assert.equal(doc.service.length, 3); // val-log + registration + a2a
     assert.equal(doc.hederaAccountId, "0.0.11111");
     assert.equal(doc.hcsTopicId, "0.0.12345");

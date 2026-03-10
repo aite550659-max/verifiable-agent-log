@@ -24,14 +24,15 @@ export function canonicalJson(obj: unknown): string {
 
 /**
  * Detect key type from a PrivateKey instance.
+ * Throws on unrecognized key format rather than silently mislabeling.
  */
 function keyAlgorithm(key: PrivateKey): "ed25519" | "ecdsa-secp256k1" {
-  // Hedera SDK: ED25519 keys have 32-byte raw, ECDSA have 32-byte but different DER prefix
   const der = key.toStringDer();
   // ED25519 DER prefix: 302e020100300506032b657004220420
-  // ECDSA DER prefix:   30300201010420...
   if (der.startsWith("302e")) return "ed25519";
-  return "ecdsa-secp256k1";
+  // ECDSA secp256k1 DER prefixes
+  if (der.startsWith("3030") || der.startsWith("3074")) return "ecdsa-secp256k1";
+  throw new Error(`Unrecognized key DER format: ${der.slice(0, 8)}... — cannot determine signing algorithm`);
 }
 
 /**
@@ -63,7 +64,10 @@ export function verifyAttestation(
   if (!sig) return false;
 
   const colonIdx = sig.indexOf(":");
-  if (colonIdx === -1) return false;
+  if (colonIdx < 1) return false;
+
+  const algo = sig.slice(0, colonIdx);
+  if (!["ed25519", "ecdsa-secp256k1"].includes(algo)) return false;
 
   const sigBytes = Buffer.from(sig.slice(colonIdx + 1), "base64");
   const { sig: _, ...rest } = attestation;

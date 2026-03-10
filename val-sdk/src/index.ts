@@ -16,7 +16,10 @@ export {
   generateERC8004Registration,
   generateA2ACard,
   createBridgedPayload,
+  encodePublicKeyMultibase,
+  base58btcEncode,
 } from "./identity";
+export { sha256, sha256File } from "./hash";
 export type { WalletInfo } from "./wallet";
 export type { StoredWallet } from "./provision";
 export type { DIDDocument, ERC8004RegistrationFile, A2AAgentCard } from "./identity";

@@ -89,14 +89,18 @@ export interface AgentCreateData {
 export interface SoulVerifyData {
   soul_hash: string;
   files?: Record<string, string>;
-  changed: boolean;
-  prev_hash?: string;
+  /** Whether current hash matches the last attested hash (true = integrity intact) */
+  match: boolean;
 }
 
 /** Data payload for heartbeat */
 export interface HeartbeatData {
+  /** Heartbeat sequence number */
   seq: number;
-  uptime_h?: number;
+  /** Agent status (required per spec §5.4) */
+  status: "active" | "idle" | "degraded" | "shutdown";
+  /** Seconds since last restart */
+  uptime_s?: number;
   actions_since_last?: number;
   soul_hash?: string;
 }
@@ -113,6 +117,8 @@ export interface AttestOptions {
   input?: unknown;
   /** Raw output to hash (will be SHA-256'd, not stored) */
   output?: unknown;
+  /** Raw context to hash (conversation/task context at time of action) */
+  context?: unknown;
   /** Override the action category for policy evaluation */
   category?: ActionCategory;
   /** Force attestation regardless of policy (use sparingly) */

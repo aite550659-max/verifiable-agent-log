@@ -7,8 +7,8 @@ import {
   PrivateKey,
 } from "@hashgraph/sdk";
 import { sha256 } from "./hash";
-import { signAttestation } from "./signing";
-import { constructDID, resolveToTopicId } from "./identity";
+import { signAttestation, canonicalJson } from "./signing";
+import { constructDID, resolveToTopicId, encodePublicKeyMultibase } from "./identity";
 import { PolicyEngine } from "./policy";
 import { loadWallet, saveWallet, provisionViaRelay } from "./provision";
 import { ensureFunded } from "./autofund";
@@ -24,13 +24,13 @@ import type {
   HeartbeatData,
 } from "./types";
 
-/** Parse a private key from various formats (tries ECDSA first — most common for Hedera) */
+/** Parse a private key from various formats (tries Ed25519 first — recommended by VAL spec) */
 function parsePrivateKey(key: string): PrivateKey {
   try {
-    return PrivateKey.fromStringECDSA(key);
+    return PrivateKey.fromStringED25519(key);
   } catch {
     try {
-      return PrivateKey.fromStringED25519(key);
+      return PrivateKey.fromStringECDSA(key);
     } catch {
       try {
         return PrivateKey.fromStringDer(key);
@@ -105,8 +105,8 @@ export class VAL {
       if (!this.privateKey) {
         this.privateKey = parsePrivateKey(this.config.operatorKey!);
       }
+      // No adminKey — topic is immutable (cannot be deleted)
       const tx = await new TopicCreateTransaction()
-        .setAdminKey(this.privateKey)
         .setSubmitKey(this.privateKey)
         .setTopicMemo(`VAL:${this.config.agentName ?? "agent"}`)
         .execute(this.client);
@@ -115,8 +115,7 @@ export class VAL {
 
       // Construct DID if not already set
       if (!this._did && this.privateKey) {
-        const pubKeyHex = this.privateKey.publicKey.toStringRaw();
-        const multibase = `z${pubKeyHex}`;
+        const multibase = encodePublicKeyMultibase(this.privateKey.publicKey.toBytes());
         this._did = constructDID(
           this.config.network ?? "mainnet",
           multibase,
@@ -283,6 +282,7 @@ export class VAL {
       desc: opts.desc,
       input_hash: opts.input !== undefined ? sha256(opts.input) : undefined,
       output_hash: opts.output !== undefined ? sha256(opts.output) : undefined,
+      context_hash: opts.context !== undefined ? sha256(opts.context) : undefined,
     };
 
     // Apply privacy redaction based on policy
@@ -360,7 +360,7 @@ export class VAL {
       type: "heartbeat",
       ts: new Date().toISOString(),
       agent: this._did ?? this.topicId!.toString(),
-      data: { seq: this.heartbeatSeq, ...data },
+      data: { status: "active", seq: this.heartbeatSeq, ...data },
       sig: "",
     });
   }
@@ -445,7 +445,8 @@ export class VAL {
       throw new Error("Cannot sign attestation: no private key available. VAL v1.1 requires signing.");
     }
 
-    const message = JSON.stringify(attestation);
+    // Use canonical JSON for consistent hashing and wire format
+    const message = canonicalJson(attestation);
 
     // HCS 1024-byte limit check
     const bytes = Buffer.byteLength(message, "utf8");

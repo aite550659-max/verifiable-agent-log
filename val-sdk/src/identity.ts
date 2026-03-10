@@ -1,5 +1,32 @@
 import type { AgentCreateData, AgentBridgedPayload, TEEAttestation } from "./types";
 
+// ─── Base58btc Encoder ───────────────────────────────────────
+
+const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+/** Encode a Uint8Array to base58btc string. */
+export function base58btcEncode(bytes: Uint8Array): string {
+  // Count leading zeros
+  let zeros = 0;
+  for (let i = 0; i < bytes.length && bytes[i] === 0; i++) zeros++;
+
+  // Convert to bigint
+  let num = BigInt(0);
+  for (const byte of bytes) num = num * 256n + BigInt(byte);
+
+  // Convert to base58
+  const chars: string[] = [];
+  while (num > 0n) {
+    chars.unshift(BASE58_ALPHABET[Number(num % 58n)]);
+    num = num / 58n;
+  }
+
+  // Prepend '1' for each leading zero byte
+  for (let i = 0; i < zeros; i++) chars.unshift("1");
+
+  return chars.join("");
+}
+
 // ─── DID Utilities ───────────────────────────────────────────
 
 /**
@@ -30,6 +57,18 @@ export function extractNetworkFromDID(did: string): string | null {
   const parts = did.split(":");
   if (parts.length < 3) return null;
   return parts[2]; // "mainnet" or "testnet"
+}
+
+/**
+ * Encode a public key as multibase base58btc with multicodec prefix.
+ * Ed25519 multicodec: 0xed, 0x01
+ */
+export function encodePublicKeyMultibase(publicKeyBytes: Uint8Array): string {
+  const prefixed = new Uint8Array(2 + publicKeyBytes.length);
+  prefixed[0] = 0xed; // ed25519-pub multicodec
+  prefixed[1] = 0x01;
+  prefixed.set(publicKeyBytes, 2);
+  return `z${base58btcEncode(prefixed)}`;
 }
 
 /**
@@ -64,6 +103,7 @@ export interface DIDDocument {
   verificationMethod: Array<{
     id: string;
     type: string;
+    controller: string;
     publicKeyMultibase: string;
   }>;
   service: Array<{
@@ -117,8 +157,9 @@ export function generateDIDDocument(opts: {
     id: opts.did,
     verificationMethod: [
       {
-        id: "#key-1",
+        id: `${opts.did}#key-1`,
         type: "Ed25519VerificationKey2020",
+        controller: opts.did,
         publicKeyMultibase: opts.publicKeyMultibase,
       },
     ],
