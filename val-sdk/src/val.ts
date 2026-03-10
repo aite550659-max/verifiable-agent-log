@@ -105,8 +105,9 @@ export class VAL {
       if (!this.privateKey) {
         this.privateKey = parsePrivateKey(this.config.operatorKey!);
       }
-      // No adminKey — topic is immutable (cannot be deleted)
+      // adminKey retained: owner sovereignty over their agent's trail
       const tx = await new TopicCreateTransaction()
+        .setAdminKey(this.privateKey)
         .setSubmitKey(this.privateKey)
         .setTopicMemo(`VAL:${this.config.agentName ?? "agent"}`)
         .execute(this.client);
