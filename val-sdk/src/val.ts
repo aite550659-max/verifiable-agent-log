@@ -7,6 +7,8 @@ import {
   PrivateKey,
 } from "@hashgraph/sdk";
 import { sha256 } from "./hash";
+import { signAttestation } from "./signing";
+import { constructDID, resolveToTopicId } from "./identity";
 import { PolicyEngine } from "./policy";
 import { loadWallet, saveWallet, provisionViaRelay } from "./provision";
 import { ensureFunded } from "./autofund";
@@ -58,6 +60,8 @@ export class VAL {
   private heartbeatSeq = 0;
   private policy: PolicyEngine;
   private _skipped = 0;
+  private privateKey: PrivateKey | null = null;
+  private _did: string | null = null;
 
   constructor(config: VALConfig) {
     this.config = config;
@@ -69,11 +73,14 @@ export class VAL {
       network === "testnet" ? Client.forTestnet() : Client.forMainnet();
 
     if (config.operatorId && config.operatorKey) {
+      this.privateKey = parsePrivateKey(config.operatorKey);
       this.client.setOperator(
         AccountId.fromString(config.operatorId),
-        parsePrivateKey(config.operatorKey)
+        this.privateKey
       );
     }
+
+    this._did = config.did ?? null;
 
     if (config.topicId) {
       this.topicId = TopicId.fromString(config.topicId);
@@ -95,28 +102,53 @@ export class VAL {
 
     // Step 2: Create topic if needed
     if (!this.topicId) {
-      const operatorKey = parsePrivateKey(this.config.operatorKey!);
+      if (!this.privateKey) {
+        this.privateKey = parsePrivateKey(this.config.operatorKey!);
+      }
       const tx = await new TopicCreateTransaction()
-        .setAdminKey(operatorKey)
-        .setSubmitKey(operatorKey)
+        .setAdminKey(this.privateKey)
+        .setSubmitKey(this.privateKey)
         .setTopicMemo(`VAL:${this.config.agentName ?? "agent"}`)
         .execute(this.client);
       const receipt = await tx.getReceipt(this.client);
       this.topicId = receipt.topicId!;
 
+      // Construct DID if not already set
+      if (!this._did && this.privateKey) {
+        const pubKeyHex = this.privateKey.publicKey.toStringRaw();
+        const multibase = `z${pubKeyHex}`;
+        this._did = constructDID(
+          this.config.network ?? "mainnet",
+          multibase,
+          this.topicId.toString()
+        );
+      }
+
+      // Determine agent identifier (DID preferred, fallback to topic ID)
+      const agentIdentifier = this._did ?? this.topicId.toString();
+
       // Post agent.create as first message
+      const createPayload: Record<string, unknown> = {
+        name: createData?.name ?? this.config.agentName ?? "agent",
+        soul_hash: createData?.soul_hash ?? "",
+        capabilities: createData?.capabilities ?? [],
+        creator: createData?.creator ?? this.config.operatorId ?? "",
+        framework: createData?.framework ?? "val-sdk/1.1.0",
+      };
+      // v1.1 optional fields
+      if (this._did) createPayload.did = this._did;
+      if (createData?.registration_uri ?? this.config.registrationUri)
+        createPayload.registration_uri = createData?.registration_uri ?? this.config.registrationUri;
+      if (createData?.a2a_endpoint ?? this.config.a2aEndpoint)
+        createPayload.a2a_endpoint = createData?.a2a_endpoint ?? this.config.a2aEndpoint;
+
       await this.submit({
-        val: "1.0",
+        val: "1.1",
         type: "agent.create",
         ts: new Date().toISOString(),
-        agent: this.topicId.toString(),
-        data: {
-          name: createData?.name ?? this.config.agentName ?? "agent",
-          soul_hash: createData?.soul_hash ?? "",
-          capabilities: createData?.capabilities ?? [],
-          creator: createData?.creator ?? this.config.operatorId ?? "",
-          framework: createData?.framework ?? "val-sdk/0.1.0",
-        },
+        agent: agentIdentifier,
+        data: createPayload,
+        sig: "", // will be filled by submit()
       });
 
       // Persist wallet + topic for resumption
@@ -134,12 +166,13 @@ export class VAL {
     if (stored) {
       this.config.operatorId = stored.accountId;
       this.config.operatorKey = stored.privateKey;
+      this.privateKey = parsePrivateKey(stored.privateKey);
       if (stored.topicId) {
         this.topicId = TopicId.fromString(stored.topicId);
       }
       this.client.setOperator(
         AccountId.fromString(stored.accountId),
-        parsePrivateKey(stored.privateKey)
+        this.privateKey
       );
       return;
     }
@@ -160,9 +193,10 @@ export class VAL {
 
     this.config.operatorId = wallet.accountId;
     this.config.operatorKey = wallet.privateKey;
+    this.privateKey = parsePrivateKey(wallet.privateKey);
     this.client.setOperator(
       AccountId.fromString(wallet.accountId),
-      parsePrivateKey(wallet.privateKey)
+      this.privateKey
     );
 
     // Save for future sessions
@@ -184,8 +218,19 @@ export class VAL {
     }
   }
 
-  /** The agent's topic ID (log identifier) */
+  /** The agent's identifier (DID if available, otherwise topic ID) */
   get agentId(): string {
+    if (!this.topicId) throw new Error("VAL not initialized — call init() first");
+    return this._did ?? this.topicId.toString();
+  }
+
+  /** The agent's DID (null if not set) */
+  get did(): string | null {
+    return this._did;
+  }
+
+  /** The raw HCS topic ID */
+  get topicIdStr(): string {
     if (!this.topicId) throw new Error("VAL not initialized — call init() first");
     return this.topicId.toString();
   }
@@ -248,11 +293,12 @@ export class VAL {
     );
 
     return this.submit({
-      val: "1.0",
+      val: "1.1",
       type: "action",
       ts: new Date().toISOString(),
-      agent: this.topicId!.toString(),
+      agent: this._did ?? this.topicId!.toString(),
       data,
+      sig: "",
     });
   }
 
@@ -260,11 +306,12 @@ export class VAL {
   async verifySoul(data: SoulVerifyData): Promise<{ sequenceNumber: number; topicId: string }> {
     this.ensureReady();
     return this.submit({
-      val: "1.0",
+      val: "1.1",
       type: "soul.verify",
       ts: new Date().toISOString(),
-      agent: this.topicId!.toString(),
+      agent: this._did ?? this.topicId!.toString(),
       data: data as unknown as Record<string, unknown>,
+      sig: "",
     });
   }
 
@@ -309,11 +356,12 @@ export class VAL {
     this.ensureReady();
     this.heartbeatSeq++;
     return this.submit({
-      val: "1.0",
+      val: "1.1",
       type: "heartbeat",
       ts: new Date().toISOString(),
-      agent: this.topicId!.toString(),
+      agent: this._did ?? this.topicId!.toString(),
       data: { seq: this.heartbeatSeq, ...data },
+      sig: "",
     });
   }
 
@@ -388,6 +436,13 @@ export class VAL {
     // Chain: include hash of previous message
     if (this.prevHash) {
       attestation.prev = this.prevHash;
+    }
+
+    // Sign the attestation (required in v1.1)
+    if (this.privateKey) {
+      attestation.sig = signAttestation(attestation as unknown as Record<string, unknown>, this.privateKey);
+    } else {
+      throw new Error("Cannot sign attestation: no private key available. VAL v1.1 requires signing.");
     }
 
     const message = JSON.stringify(attestation);
