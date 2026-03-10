@@ -1,0 +1,62 @@
+{
+  "id": "val-attestation",
+  "name": "VAL Auto-Attestation",
+  "version": "1.1.0",
+  "description": "Automatic tool attestation to Hedera Consensus Service via the Verifiable Agent Log (VAL) protocol. Moves agents from cooperative to SDK-level enforcement.",
+  "author": "VAL Protocol",
+  "license": "MIT",
+  "homepage": "https://github.com/aite550659-max/verifiable-agent-log",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "topicId": {
+        "type": "string",
+        "description": "HCS topic ID for attestations (e.g., '0.0.10305159'). If omitted, a new topic is created on first run."
+      },
+      "operatorId": {
+        "type": "string",
+        "description": "Hedera operator account ID (e.g., '0.0.10255397')."
+      },
+      "operatorKey": {
+        "type": "string",
+        "description": "Hedera operator private key (DER hex). Prefer operatorKeyRef for security."
+      },
+      "operatorKeyRef": {
+        "type": "string",
+        "description": "Keychain reference for operator key (e.g., 'keychain:aite-private-key'). Preferred over operatorKey."
+      },
+      "policy": {
+        "type": "string",
+        "enum": ["minimal", "standard", "strict"],
+        "default": "standard",
+        "description": "Attestation policy level. 'minimal' = financial/identity only, 'standard' = adds external actions, 'strict' = everything."
+      },
+      "network": {
+        "type": "string",
+        "enum": ["mainnet", "testnet"],
+        "default": "mainnet"
+      },
+      "agentName": {
+        "type": "string",
+        "description": "Agent name for the VAL log."
+      },
+      "did": {
+        "type": "string",
+        "description": "Agent's DID (did:hedera:...). Auto-generated if omitted."
+      },
+      "async": {
+        "type": "boolean",
+        "default": true,
+        "description": "If true, attestations are fire-and-forget (non-blocking). If false, tool execution waits for HCS confirmation."
+      }
+    }
+  },
+  "uiHints": {
+    "operatorKey": { "label": "Operator Key", "sensitive": true },
+    "operatorKeyRef": { "label": "Operator Key (Keychain)", "placeholder": "keychain:aite-private-key" },
+    "topicId": { "label": "HCS Topic ID", "placeholder": "0.0.XXXXX" },
+    "operatorId": { "label": "Operator Account", "placeholder": "0.0.XXXXX" },
+    "policy": { "label": "Attestation Policy" }
+  }
+}
