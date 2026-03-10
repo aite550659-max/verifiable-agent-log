@@ -1,7 +1,7 @@
 {
-  "name": "@valprotocol/sdk",
+  "name": "val-sdk",
   "version": "1.1.0",
-  "description": "Verifiable Agent Log — immutable audit trails for AI agents via Hedera Consensus Service",
+  "description": "Verifiable Agent Log \u2014 immutable audit trails for AI agents via Hedera Consensus Service",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
