@@ -141,13 +141,17 @@ function resolveOperatorKey(config: PluginConfig): string | null {
 // val-sdk to keep the plugin dependency-free. The attestation format
 // matches VAL v1.1 exactly.
 
-let hederaSdk: typeof import("@hashgraph/sdk") | null = null;
+let hederaSdk: any = null;
 
-async function loadHederaSDK() {
+function loadHederaSDK() {
   if (!hederaSdk) {
-    // Dynamic import — @hashgraph/sdk should be available in the
-    // OpenClaw environment (it's a val-sdk dependency)
-    hederaSdk = await import("@hashgraph/sdk");
+    // Require from plugin's own node_modules
+    try {
+      hederaSdk = require("@hashgraph/sdk");
+    } catch {
+      // Fallback: dynamic import for ESM environments
+      throw new Error("@hashgraph/sdk not found. Run 'npm install' in the val-attestation plugin directory.");
+    }
   }
   return hederaSdk;
 }
@@ -165,7 +169,7 @@ let state: AttestationState | null = null;
 
 async function initAttestation(config: PluginConfig, logger: any): Promise<boolean> {
   try {
-    const sdk = await loadHederaSDK();
+    const sdk = loadHederaSDK();
     const { Client, AccountId, PrivateKey, TopicId } = sdk;
 
     const operatorKey = resolveOperatorKey(config);
@@ -174,13 +178,13 @@ async function initAttestation(config: PluginConfig, logger: any): Promise<boole
       return false;
     }
 
-    // Try Ed25519 first (recommended), then ECDSA
+    // Try ECDSA first (common for Hedera accounts), then Ed25519
     let privateKey;
     try {
-      privateKey = PrivateKey.fromStringED25519(operatorKey);
+      privateKey = PrivateKey.fromStringECDSA(operatorKey);
     } catch {
       try {
-        privateKey = PrivateKey.fromStringECDSA(operatorKey);
+        privateKey = PrivateKey.fromStringED25519(operatorKey);
       } catch {
         privateKey = PrivateKey.fromString(operatorKey);
       }
@@ -253,7 +257,7 @@ async function submitAttestation(
 ): Promise<void> {
   if (!state?.ready) return;
 
-  const sdk = await loadHederaSDK();
+  const sdk = loadHederaSDK();
   const { TopicMessageSubmitTransaction } = sdk;
 
   const attestation: Record<string, unknown> = {
@@ -310,6 +314,15 @@ async function submitAttestation(
 
 export default function register(api: any) {
   const logger = api.logger ?? console;
+
+  // Verify @hashgraph/sdk is available before registering hooks
+  try {
+    loadHederaSDK();
+  } catch (err) {
+    logger.warn(`VAL attestation: @hashgraph/sdk not available — plugin disabled. ${err}`);
+    return;
+  }
+
   let config: PluginConfig = {};
   let initialized = false;
   let initPromise: Promise<boolean> | null = null;
